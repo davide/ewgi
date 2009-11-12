@@ -303,20 +303,20 @@ handle_push_stream(A, Ctx, true, GeneratorPid, Timeout) ->
 		Headers = lists:foldl(fun fold_header/2, [], Headers1),
 		ExtraHeaders = httpd_response:cache_headers(A),
 		httpd_response:send_header(A, Code, ExtraHeaders ++ Headers),
+		Socket = A#mod.socket,
 		case TransferEncoding of
 			chunked ->
-				GeneratorPid ! {ok, self()}
+				wait_for_streamcontent_pid(Socket, GeneratorPid)
 			;_ ->
 				%% WARNING: we're depending on the original ewgi_context here!!!!
 				case ewgi_api:request_method(Ctx) of
 					'HEAD' ->
+						ok = gen_tcp:close(Socket),
 						GeneratorPid ! {discard, self()};
 					_ ->
-						GeneratorPid ! {ok, self()}
+						wait_for_streamcontent_pid(Socket, GeneratorPid)
 				end	
-		end,
-		Socket = A#mod.socket,
-		wait_for_streamcontent_pid(Socket, GeneratorPid)
+		end
 	after Timeout ->
 		Body = "Gateway Timeout",
 		Length = {content_length, integer_to_list(erlang:iolist_size(Body))},

@@ -87,7 +87,7 @@ handle_push_stream(Ctx, Req, GeneratorPid, Timeout) ->
 		case TransferEncoding of
 			chunked ->
 				Req:respond({Code, Headers, chunked}),
-				GeneratorPid ! {ok, self()}
+				wait_for_streamcontent_pid(Socket, GeneratorPid)
 			;_ ->
 				%% mochiweb_request:respond/1 expects the full body in order to
 				%% count the content-length but we already have that. What we're
@@ -97,12 +97,12 @@ handle_push_stream(Ctx, Req, GeneratorPid, Timeout) ->
 				%% WARNING: we're depending on the original ewgi_context here!!!!
 				case ewgi_api:request_method(Ctx) of
 					'HEAD' ->
+						ok = gen_tcp:close(Socket),
 						GeneratorPid ! {discard, self()};
 					_ ->
-						GeneratorPid ! {ok, self()}
+						wait_for_streamcontent_pid(Socket, GeneratorPid)
 				end
-		end,
-		wait_for_streamcontent_pid(Socket, GeneratorPid)
+		end
 	after Timeout ->
 		Req:respond({504, [], <<"Gateway Timeout">>})
 	end.
