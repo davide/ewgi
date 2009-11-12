@@ -51,12 +51,12 @@ run(Appl, Arg) ->
                     handle_result(?INSPECT_EWGI_RESPONSE(Ctx), Arg#arg.clisock)
             catch
                 _:Reason ->
-                    error_logger:error_report(Reason),
+                    error_logger:error_report(io_lib:format("Responding with 500 INTERNAL SERVER ERROR.~nReason: ~p~nStack: ~p~n", [Reason, erlang:get_stacktrace()])),
                     ?INTERNAL_ERROR
             end
     catch
         _:Reason ->
-            error_logger:error_report(Reason),
+            error_logger:error_report(io_lib:format("Responding with 400 BAD REQUEST.~nReason: ~p~nStack: ~p~n", [Reason, erlang:get_stacktrace()])),
             ?BAD_REQUEST
     end.
 

@@ -51,14 +51,15 @@ run(Appl, MochiReq) ->
                     handle_result(?INSPECT_EWGI_RESPONSE(Ctx), MochiReq)
             catch
                 _:Reason ->
-                    error_logger:error_report(Reason),
+                    error_logger:error_report(io_lib:format("Responding with 500 INTERNAL SERVER ERROR.~nReason: ~p~nStack: ~p~n", [Reason, erlang:get_stacktrace()])),
                     MochiReq:respond({500, [], "Internal server error"})
             end
     catch
         _:Reason ->
-            error_logger:error_report(Reason),
+            error_logger:error_report(io_lib:format("Responding with 400 BAD REQUEST.~nReason: ~p~nStack: ~p~n", [Reason, erlang:get_stacktrace()])),
             MochiReq:respond({400, [], "Bad request"})
     end.
+
 
 %% Chunked response if a nullary function is returned
 handle_result(Ctx, Req) ->
