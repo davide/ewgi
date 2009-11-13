@@ -13,7 +13,6 @@
 %% Licensed under the MIT license:
 %% http://www.opensource.org/licenses/mit-license.php
 
-
 main([EBinFolder, AppFileSrc | Others]) ->
 	[code:add_patha(Other) || Other <- Others],
 	code:add_patha(EBinFolder),
