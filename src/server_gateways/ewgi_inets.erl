@@ -55,15 +55,19 @@ do(A) ->
     end.
 
 process_application(Ctx) ->
-    M = case application:get_env(ewgi, app_module) of
+    M = case application:get_env(ewgi, ewgi_entry_app_module) of
             {ok, Mod} -> Mod;
-            _ -> throw({error, "ewgi app_module environment variable not set"})
+            _ -> throw({error, "ewgi ewgi_entry_app_module environment variable not set"})
         end,
-    F = case application:get_env(ewgi, app_function) of
+    F = case application:get_env(ewgi, ewgi_entry_app_function) of
             {ok, Fun} -> Fun;
-            _ -> throw({error, "ewgi app_function environment variable not set"})
+            _ -> throw({error, "ewgi ewgi_entry_app_function environment variable not set"})
         end,
-    Appl = fun(A) -> apply(M, F, [A]) end,
+    A = case application:get_env(ewgi, ewgi_entry_app_args) of
+            {ok, Args} -> Args;
+            _ -> throw({error, "ewgi ewgi_entry_app_args environment variable not set"})
+        end,
+    Appl = ewgi_application:mfa_mw(M, F, A),
     ewgi_application:run(Appl, Ctx).
 
 parse_arg(A) when is_record(A, mod) ->
