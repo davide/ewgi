@@ -336,9 +336,11 @@ parse_ewgi_element(write_error, Req) ->
         end,
     F;
 
-%% https?
-parse_ewgi_element(url_scheme, _Req) ->
-    "http";
+parse_ewgi_element(url_scheme, Req) ->
+    case Req:get(socket) of
+	{sslsocket,_,_} -> "https";
+	_ -> "http"
+    end;
 
 parse_ewgi_element(version, _Req) ->
     {1, 0};

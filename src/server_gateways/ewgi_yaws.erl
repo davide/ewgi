@@ -236,9 +236,11 @@ parse_ewgi_element(write_error, Req) ->
         end,
     F;
 
-%% https?
-parse_ewgi_element(url_scheme, _) ->
-    "http";
+parse_ewgi_element(url_scheme, Req) ->
+    case Req#arg.clisock of
+	{sslsocket,_,_} -> "https";
+	_ -> "http"
+    end;
 
 parse_ewgi_element(version, _) ->
     {1, 0};
