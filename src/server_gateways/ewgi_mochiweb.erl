@@ -97,7 +97,12 @@ handle_push_stream(Ctx, Req, GeneratorPid, Timeout) ->
 				%% WARNING: we're depending on the original ewgi_context here!!!!
 				case ewgi_api:request_method(Ctx) of
 					'HEAD' ->
-						ok = gen_tcp:close(Socket),
+						case Socket of
+							{sslsocket,_,_} ->
+								ok = ssl:close(Socket);
+							_ ->
+								ok = gen_tcp:close(Socket)
+						end,
 						GeneratorPid ! {discard, self()};
 					_ ->
 						wait_for_streamcontent_pid(Socket, GeneratorPid)
@@ -132,11 +137,21 @@ handle_stream(R, Generator) ->
 %% Copied/adapted from yaws_server
 wait_for_streamcontent_pid(CliSock, ContentPid) ->
     Ref = erlang:monitor(process, ContentPid),
-    gen_tcp:controlling_process(CliSock, ContentPid),
+    case CliSock of
+	{sslsocket,_,_} ->
+	    ssl:controlling_process(CliSock, ContentPid);
+	_ ->
+	    gen_tcp:controlling_process(CliSock, ContentPid)
+    end,
     ContentPid ! {ok, self()},
     receive
         endofstreamcontent ->
-	    ok = gen_tcp:close(CliSock),
+	    case CliSock of
+		{sslsocket,_,_} ->
+		    ok = ssl:close(CliSock);
+		_ ->
+		    ok = gen_tcp:close(CliSock)
+	    end,
             erlang:demonitor(Ref),
             %% should just use demonitor [flush] option instead?
             receive
@@ -157,28 +172,32 @@ wait_for_streamcontent_pid(CliSock, ContentPid) ->
 %% just copying the socket.
 %%--------------------------------------------------------------------
 
-%% This won't work for SSL for now
+stream_process_deliver(Sock={sslsocket,_,_}, IoList) ->
+    ssl:send(Sock, IoList);
 stream_process_deliver(Sock, IoList) ->
     gen_tcp:send(Sock, IoList).
 
-%% This won't work for SSL for now either
 stream_process_deliver_chunk(Sock, IoList) ->
     Chunk = case erlang:iolist_size(IoList) of
                 0 ->
                     stream_process_deliver_final_chunk(Sock, IoList);
                 S ->
-                    [mochihex:to_hex(S), "\r\n", IoList, "\r\n"]
+                    [http_util:integer_to_hexlist(S), "\r\n", IoList, "\r\n"]
             end,
-    gen_tcp:send(Sock, Chunk).
+    stream_process_deliver(Sock, Chunk).
+	
 stream_process_deliver_final_chunk(Sock, IoList) ->
     Chunk = case erlang:iolist_size(IoList) of
                 0 ->
                     <<"0\r\n\r\n">>;
                 S ->
-                    [mochihex:to_hex(S), "\r\n", IoList, "\r\n0\r\n\r\n"]
+                    [http_util:integer_to_hexlist(S), "\r\n", IoList, "\r\n0\r\n\r\n"]
             end,
-    gen_tcp:send(Sock, Chunk).
+    stream_process_deliver(Sock, Chunk).
 
+stream_process_end(Sock={sslsocket,_,_}, ServerPid) ->
+    ssl:controlling_process(Sock, ServerPid),
+    ServerPid ! endofstreamcontent;
 stream_process_end(Sock, ServerPid) ->
     gen_tcp:controlling_process(Sock, ServerPid),
     ServerPid ! endofstreamcontent.
