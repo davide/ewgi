@@ -36,9 +36,11 @@
 -include_lib("ewgi.hrl").
 
 do(A) ->
+    %% Taking advantage of the fact that all options are dumped to the config_db
+    Appl = httpd_util:lookup(A#mod.config_db, ewgi_entry_app),
     try parse_arg(A) of
         Req when ?IS_EWGI_REQUEST(Req) ->
-            try process_application(ewgi_api:context(Req, ewgi_api:empty_response())) of
+            try Appl(ewgi_api:context(Req, ewgi_api:empty_response())) of
                 not_found ->
                     {proceed, [{response, {404, []}}]};
                 Ctx when ?IS_EWGI_CONTEXT(Ctx) ->
@@ -53,22 +55,6 @@ do(A) ->
             error_logger:error_report(io_lib:format("Responding with 400 BAD REQUEST.~nReason: ~p~nStack: ~p~n", [Reason, erlang:get_stacktrace()])),
             {break, [{response, {400, []}}]}
     end.
-
-process_application(Ctx) ->
-    M = case application:get_env(ewgi, ewgi_entry_app_module) of
-            {ok, Mod} -> Mod;
-            _ -> throw({error, "ewgi ewgi_entry_app_module environment variable not set"})
-        end,
-    F = case application:get_env(ewgi, ewgi_entry_app_function) of
-            {ok, Fun} -> Fun;
-            _ -> throw({error, "ewgi ewgi_entry_app_function environment variable not set"})
-        end,
-    A = case application:get_env(ewgi, ewgi_entry_app_args) of
-            {ok, Args} -> Args;
-            _ -> throw({error, "ewgi ewgi_entry_app_args environment variable not set"})
-        end,
-    Appl = ewgi_application:mfa_mw(M, F, A),
-    ewgi_application:run(Appl, Ctx).
 
 parse_arg(A) when is_record(A, mod) ->
     ewgi_api:server_request_foldl(A, fun parse_element/2, fun parse_ewgi_element/2, fun parse_http_header_element/2).
