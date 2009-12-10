@@ -23,18 +23,19 @@ do_zip(Ctx, [Dir, ZipType]) ->
 	do_zip(Ctx, [Dir, ZipType, "all"]);
 
 do_zip(Ctx0, [Dir, ZipType, SuggestedFilename]) ->
-	Filename = SuggestedFilename ++ "." ++ ZipType,
 	case ZipType of
-		"tgz" ->
+		"tgz" = Ext ->
 			DoZip = fun tgz/2,
 			CT = "application/gzip";
-		"tbz2" ->
+		"tbz2" = Ext ->
 			DoZip = fun tbz2/2,
 			CT = "application/gzip";
 		_ -> %% "zip" ->
+			Ext = "zip",
 			DoZip = fun zip/2,
 			CT = "application/zip"
 	end,
+	Filename = SuggestedFilename ++ "." ++ Ext,
 	Status = {200, "OK"},
 	H = ewgi_api:response_headers(Ctx0),
 	AttachmentHeader = {"Content-Disposition",
