@@ -15,11 +15,15 @@
 
 -export([run/2]).
 
-run(Ctx, [_Dir, _ZipType]=Args) ->
+run(Ctx, Args) ->
 	ZipperPid = spawn(fun() -> do_zip(Ctx, Args) end),
 	ewgi_push_stream:run(Ctx, [ZipperPid]).
-	
-do_zip(Ctx0, [Dir, ZipType]) ->
+
+do_zip(Ctx, [Dir, ZipType]) ->
+	do_zip(Ctx, [Dir, ZipType, "all"]);
+
+do_zip(Ctx0, [Dir, ZipType, SuggestedFilename]) ->
+	Filename = SuggestedFilename ++ "." ++ ZipType,
 	case ZipType of
 		"tgz" ->
 			DoZip = fun tgz/2,
@@ -33,8 +37,10 @@ do_zip(Ctx0, [Dir, ZipType]) ->
 	end,
 	Status = {200, "OK"},
 	H = ewgi_api:response_headers(Ctx0),
+	AttachmentHeader = {"Content-Disposition",
+									"attachment; filename=\"" ++ Filename ++ "\""},
 	CTHeader = {"Content-type", CT},
-	Ctx = ewgi_api:response_headers([CTHeader|H],
+	Ctx = ewgi_api:response_headers([AttachmentHeader, CTHeader|H],
 				ewgi_api:response_status(Status, Ctx0)),
 	case ewgi_api:stream_process_init(Ctx, chunked) of
 		{ok, Connection} ->
@@ -42,7 +48,6 @@ do_zip(Ctx0, [Dir, ZipType]) ->
 			ewgi_api:stream_process_end(Connection);
 		_ -> ok
 	end.
-
 
 zip(Connection, Dir) ->
     process_flag(trap_exit, true),    
