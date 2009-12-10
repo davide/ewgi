@@ -386,6 +386,10 @@ stream_process_end(Sock, ServerPid) ->
 
 %%--------------------------------------------------------------------
 
+%% What is the rationale behind this convertion?
+%% If inets doesn't exclude unknown headers (see httpd_response:transform/1)
+%% why should we do that here?
+%% I suggest that we drop this header filtering altogether. (Davide)
 fold_header({"accept-ranges", V}, Acc) ->
     [{accept_ranges, V}|Acc];
 fold_header({"allow", V}, Acc) ->
@@ -394,6 +398,8 @@ fold_header({"cache-control", V}, Acc) ->
     [{cache_control, V}|Acc];
 fold_header({"content-md5", V}, Acc) ->
     [{content_MD5, V}|Acc];
+fold_header({"content-disposition", _}=H, Acc) ->
+    [H|Acc];
 fold_header({"content-encoding", V}, Acc) ->
     [{content_encoding, V}|Acc];
 fold_header({"content-language", V}, Acc) ->
@@ -422,14 +428,14 @@ fold_header({"retry-after", V}, Acc) ->
     [{retry_after, V}|Acc];
 fold_header({"server", V}, Acc) ->
     [{server, V}|Acc];
+fold_header({"set-cookie", _}=H, Acc) ->
+    [H|Acc];
 fold_header({"trailer", V}, Acc) ->
     [{trailer, V}|Acc];
 fold_header({"transfer-encoding", V}, Acc) ->
     [{transfer_encoding, V}|Acc];
-fold_header({"set-cookie", V}, Acc) ->
-    [{"set-cookie", V}|Acc];
-fold_header({"www-authenticate", V}, Acc) ->
-    [{"www-authenticate", V}|Acc];
+fold_header({"www-authenticate", _}=H, Acc) ->
+    [H|Acc];
 fold_header(_, Acc) ->
     %% Ignore unrecognised headers
     Acc.
