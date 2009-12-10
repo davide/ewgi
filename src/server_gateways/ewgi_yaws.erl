@@ -33,7 +33,7 @@
 	 stream_process_end/2
 	]).
 
--include_lib("yaws_api.hrl").
+-include_lib("yaws/include/yaws_api.hrl").
 -include_lib("ewgi.hrl").
 
 -define(INTERNAL_ERROR, [{status, 500}, {content, "text/plain", <<"Internal Server Error">>}]).
