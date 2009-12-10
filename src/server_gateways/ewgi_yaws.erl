@@ -34,6 +34,7 @@
 	]).
 
 -include_lib("yaws/include/yaws_api.hrl").
+-include_lib("yaws/include/yaws.hrl").
 -include_lib("ewgi.hrl").
 
 -define(INTERNAL_ERROR, [{status, 500}, {content, "text/plain", <<"Internal Server Error">>}]).
@@ -216,7 +217,7 @@ parse_element(server_protocol, #arg{req=#http_request{version={Maj, Min}}}) ->
     "HTTP/" ++ integer_to_list(Maj) ++ "." ++ integer_to_list(Min);
 
 parse_element(server_software, _) ->
-    "Yaws";
+    (get(gc))#gconf.yaws;
 
 parse_element(_, _) ->
     undefined.
