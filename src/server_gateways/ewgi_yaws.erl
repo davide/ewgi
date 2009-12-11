@@ -182,11 +182,8 @@ parse_element(query_string, #arg{querydata=V}) ->
     V;
 
 parse_element(remote_addr, #arg{client_ip_port=Addr}) ->
-    {{A,B,C,D}, _Port} = Addr,
-    integer_to_list(A) ++ "."
-        ++ integer_to_list(B) ++ "."
-        ++ integer_to_list(C) ++ "."
-        ++ integer_to_list(D);
+    {IP, _Port} = Addr,
+    inet_parse:ntoa(IP);
 
 parse_element(remote_host, _Req) ->
     undefined;
