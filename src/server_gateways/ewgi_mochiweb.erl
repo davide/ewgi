@@ -66,6 +66,9 @@ handle_result(Ctx, Req) ->
 	case ewgi_api:response_message_body(Ctx) of
 		{push_stream, GeneratorPid, Timeout} when is_pid(GeneratorPid) ->
 			handle_push_stream(Ctx, Req, GeneratorPid, Timeout);
+		{websocket, WebSocketOwner} when is_pid(WebSocketOwner) ->
+			CliSock = Req:get(socket),
+			handle_websocket(CliSock, WebSocketOwner);
 		Body ->
 			{Code, _} = ewgi_api:response_status(Ctx),
 			Headers = ewgi_api:response_headers(Ctx),
@@ -111,7 +114,7 @@ handle_push_stream(Ctx, Req, GeneratorPid, Timeout) ->
 	after Timeout ->
 		Req:respond({504, [], <<"Gateway Timeout">>})
 	end.
-
+	
 %% Treat a stream with chunked transfer encoding
 handle_stream(R, Generator) when is_function(Generator, 0) ->
     case (catch Generator()) of
@@ -164,6 +167,18 @@ wait_for_streamcontent_pid(CliSock, ContentPid) ->
             ok
     end,
     done.
+
+
+handle_websocket(CliSock, WebSocketOwner) ->
+    case CliSock of
+	{sslsocket,_,_} ->
+	    ssl:controlling_process(CliSock, WebSocketOwner);
+	_ ->
+	    gen_tcp:controlling_process(CliSock, WebSocketOwner)
+    end,
+    WebSocketOwner ! {websocket_init, CliSock},
+    exit(normal).
+
 
 %%--------------------------------------------------------------------
 %% Push Streams API - copied from yaws_api

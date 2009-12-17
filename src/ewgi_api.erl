@@ -73,7 +73,16 @@
 	 stream_process_deliver_final_chunk/2,
 	 stream_process_end/1
 	]).
-
+	
+%% WebSocket methods
+-export([
+	 websocket_init/2,
+	 websocket_send/2,
+	 websocket_receive/1,
+	 websocket_unframe_data/1,
+	 websocket_setopts/2
+	]).
+	
 %%====================================================================
 %% API
 %%====================================================================
@@ -915,4 +924,122 @@ stream_process_deliver_final_chunk({ServerModule, _ServerPid, Socket}, IoList) -
 
 stream_process_end({ServerModule, ServerPid, Socket}) ->
     ServerModule:stream_process_end(Socket, ServerPid).
+
+%%--------------------------------------------------------------------
+%% Web Socket methods
+%%--------------------------------------------------------------------
+-define(WEBSOCKET_INIT_TIMEOUT, 5000).
+
+websocket_init(Ctx, SocketMode) ->
+    receive
+	{websocket_init, Socket} ->
+		Origin = ewgi_api:get_header_value("Origin", Ctx),
+		Hostname = ewgi_api:server_name(Ctx),
+		PortStr = case ewgi_api:server_port(Ctx) of
+							undefined -> "";
+							P -> ":" ++ P
+						end,
+		%% TODO: script_name ++ path_info??
+		Path = ewgi_api:path_info(Ctx),
+		HostNamePort = Hostname ++ PortStr ++ Path,
+		%% TODO: Support for wss://
+		WebSocketLocation = "ws://" ++ HostNamePort,
+		Handshake =
+			["HTTP/1.1 101 Web Socket Protocol Handshake\r\n",
+			 "Upgrade: WebSocket\r\n",
+			 "Connection: Upgrade\r\n",
+			 "WebSocket-Origin: ", Origin, "\r\n",
+			 "WebSocket-Location: ", WebSocketLocation, "\r\n",
+			 "\r\n"],
+		case Socket of
+			{sslsocket,_,_} ->
+				ssl:send(Socket, Handshake),
+				ssl:setopts(Socket, [{packet, raw}, {active, SocketMode}]);
+			_ ->
+				gen_tcp:send(Socket, Handshake),
+				inet:setopts(Socket, [{packet, raw}, {active, SocketMode}])
+		end,
+	    {ok, Socket}
+    after ?WEBSOCKET_INIT_TIMEOUT ->
+	    error_logger:error_msg(?MODULE_STRING ++": Timeout while trying to init websocket!~n"),
+	    discard
+    end.
+
+
+websocket_send(Socket, IoList) ->
+	DataFrame = [0, IoList, 255],
+	case Socket of
+		{sslsocket,_,_} ->
+			ssl:send(Socket, DataFrame);
+		_ ->
+			gen_tcp:send(Socket, DataFrame)
+	end.
+
+
+websocket_receive(Socket) ->
+	R = case Socket of
+		{sslsocket,_,_} ->
+			ssl:recv(Socket, 0);
+		_ ->
+			gen_tcp:recv(Socket, 0)
+	end,
+	case R of
+		{ok, DataFrames} ->
+			ReceivedMsgs = unframe_messages(DataFrames, []),
+			{ok, ReceivedMsgs};
+		_ -> R
+	end.
+
+
+websocket_unframe_data(DataFrameBin) ->
+	{ok, Msg, <<>>} = unframe(DataFrameBin),
+	Msg.
+
+
+unframe_messages(<<>>, Acc) ->
+	lists:reverse(Acc);
+unframe_messages(DataFramesBin, Acc) ->
+	{ok, Msg, Rem} = unframe(DataFramesBin),
+	unframe_messages(Rem, [Msg|Acc]).
+
+%% This should take care of all the Data Framing scenarios specified in
+%% http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-66#page-26
+unframe(DataFrames) ->
+	<<Type, _/bitstring>> = DataFrames,
+	case Type of
+		T when (T =< 127) ->
+			%% {ok, FF_Ended_Frame} = re:compile("^.(.*)\\xFF(.*?)", [ungreedy]),
+			FF_Ended_Frame = {re_pattern,2,0,
+                <<69,82,67,80,71,0,0,0,16,2,0,0,5,0,0,0,2,0,0,0,0,0,255,2,40,
+                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,93,0,27,25,12,94,0,7,0,1,57,
+                  12,84,0,7,27,255,94,0,7,0,2,56,12,84,0,7,84,0,27,0>>},
+			{match, [Data, NextFrame]} =
+									re:run(DataFrames, FF_Ended_Frame,
+													[{capture, all_but_first, binary}]),
+			{ok, Data, NextFrame};
+			
+		_ -> %% Type band 16#80 =:= 16#80
+			{Length, LenBytes} = unpack_length(DataFrames, 0, 0),
+			<<_, _:LenBytes/bytes, Data:Length/bytes,
+											NextFrame/bitstring>> = DataFrames,
+			{ok, Data, NextFrame}
+	end.
+
+unpack_length(Binary, LenBytes, Length) ->
+	<<_, _:LenBytes/bytes, B, _/bitstring>> = Binary,
+	B_v = B band 16#7F,
+	NewLength = (Length * 128) + B_v,
+	case B band 16#80 of
+		16#80 ->
+			unpack_length(Binary, LenBytes + 1, NewLength);
+		0 ->
+			{NewLength, LenBytes + 1}
+	end.
+
+
+websocket_setopts({sslsocket,_,_}=Socket, Opts) ->
+	ssl:setopts(Socket, Opts);
+websocket_setopts(Socket, Opts) ->
+	inet:setopts(Socket, Opts).
+
 

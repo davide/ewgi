@@ -225,6 +225,11 @@ handle_result(#mod{config_db=Db}=A, Ctx) ->
 		{push_stream, GeneratorPid, Timeout} when is_pid(GeneratorPid) ->
 			ChunkedAllowed = not httpd_response:is_disable_chunked_send(Db),
 			handle_push_stream(A, Ctx, ChunkedAllowed, GeneratorPid, Timeout);
+			
+		{websocket, WebSocketOwner} when is_pid(WebSocketOwner) ->
+			CliSock = A#mod.socket,
+			handle_websocket(CliSock, WebSocketOwner);
+
 		Body0 ->
 			{Code, _} = ewgi_api:response_status(Ctx),
 			Headers0 = [{string:to_lower(H), binary_to_list(iolist_to_binary(V))} || {H, V} <- ewgi_api:response_headers(Ctx)],
@@ -349,6 +354,16 @@ wait_for_streamcontent_pid(CliSock, ContentPid) ->
             ok
     end,
     done.
+
+handle_websocket(CliSock, WebSocketOwner) ->
+    case CliSock of
+	{sslsocket,_,_} ->
+	    ssl:controlling_process(CliSock, WebSocketOwner);
+	_ ->
+	    gen_tcp:controlling_process(CliSock, WebSocketOwner)
+    end,
+    WebSocketOwner ! {websocket_init, CliSock},
+    exit(normal).
 
 %%--------------------------------------------------------------------
 %% Push Streams API - copied from yaws_api
