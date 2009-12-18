@@ -170,14 +170,24 @@ wait_for_streamcontent_pid(CliSock, ContentPid) ->
 
 
 handle_websocket(CliSock, WebSocketOwner) ->
-    case CliSock of
-	{sslsocket,_,_} ->
-	    ssl:controlling_process(CliSock, WebSocketOwner);
-	_ ->
-	    gen_tcp:controlling_process(CliSock, WebSocketOwner)
-    end,
-    WebSocketOwner ! {websocket_init, CliSock},
-    exit(normal).
+    TakeOverResult =
+	case CliSock of
+	    {sslsocket,_,_} ->
+		ssl:controlling_process(CliSock, WebSocketOwner);
+	    _ ->
+		gen_tcp:controlling_process(CliSock, WebSocketOwner)
+	end,
+    case TakeOverResult of
+	ok ->
+	    WebSocketOwner ! {websocket_init, CliSock},
+	    %% Mochiweb, unlike Inets and Yaws doesn't close the socket on exit.
+	    %% For now there's nothing to do before exiting!
+	    %% Notice: this might change in the future.
+	    exit(normal);
+	{error, Reason} ->
+	    WebSocketOwner ! discard,
+	    exit({websocket, Reason})
+    end.
 
 
 %%--------------------------------------------------------------------
