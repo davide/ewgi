@@ -226,9 +226,11 @@ handle_result(#mod{config_db=Db}=A, Ctx) ->
 			ChunkedAllowed = not httpd_response:is_disable_chunked_send(Db),
 			handle_push_stream(A, Ctx, ChunkedAllowed, GeneratorPid, Timeout);
 			
-		{websocket, WebSocketOwner} when is_pid(WebSocketOwner) ->
-			CliSock = A#mod.socket,
-			handle_websocket(CliSock, WebSocketOwner);
+		{websocket, _WebSocketOwner} when is_pid(_WebSocketOwner) ->
+			ErrorMsg = "Web Socket not supported on Inets until someone"
+							" finds a way to prevent it from closing the socket!",
+			error_logger:error_msg("~p~n", [ErrorMsg]),
+			done;
 
 		Body0 ->
 			{Code, _} = ewgi_api:response_status(Ctx),
@@ -354,16 +356,6 @@ wait_for_streamcontent_pid(CliSock, ContentPid) ->
             ok
     end,
     done.
-
-handle_websocket(CliSock, WebSocketOwner) ->
-    case CliSock of
-	{sslsocket,_,_} ->
-	    ssl:controlling_process(CliSock, WebSocketOwner);
-	_ ->
-	    gen_tcp:controlling_process(CliSock, WebSocketOwner)
-    end,
-    WebSocketOwner ! {websocket_init, CliSock},
-    exit(normal).
 
 %%--------------------------------------------------------------------
 %% Push Streams API - copied from yaws_api
