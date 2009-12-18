@@ -33,20 +33,25 @@ websocket_example(Ctx) ->
 
 
 websocket_owner(Ctx) ->
-	SocketMode = false, %% passive mode
-	case ewgi_api:websocket_init(Ctx, SocketMode) of
+    SocketMode = false, %% passive mode
+    case ewgi_api:websocket_init(Ctx, SocketMode) of
 	{ok, WebSocket} ->
-		%% This is how we read messages (plural!!) from websockets on passive mode
-		{ok, Messages} = ewgi_api:websocket_receive(WebSocket),
-		case Messages of
+	    %% This is how we read messages (plural!!) from websockets on passive mode
+	    case ewgi_api:websocket_receive(WebSocket) of
+		{error,closed} ->
+		    io:format("The websocket got disconnected right from the start."
+			      " This wasn't supposed to happen!!~n");
+		{ok, Messages} ->
+		    case Messages of
 			[<<"client-connected">>] ->
-				ewgi_api:websocket_setopts(WebSocket, [{active, true}]),
-				echo_server(WebSocket);
+			    ewgi_api:websocket_setopts(WebSocket, [{active, true}]),
+			    echo_server(WebSocket);
 			Other ->
-				io:format("websocket_owner got: ~p. Terminating~n", [Other])
-		end;
+			    io:format("websocket_owner got: ~p. Terminating~n", [Other])
+		    end
+	    end;
 	_ -> ok
-	end.
+    end.
 
 
 echo_server(WebSocket) ->
