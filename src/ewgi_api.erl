@@ -932,6 +932,10 @@ stream_process_end({ServerModule, ServerPid, Socket}) ->
 
 websocket_init(Ctx, SocketMode) ->
     receive
+	{ok, WebSocket} = Ret ->
+		%% Yaws now has a native web sockets implementation!
+		websocket_setopts(WebSocket, [{active, SocketMode}]),
+		Ret;
 	{websocket_init, Socket} ->
 		Origin = ewgi_api:get_header_value("Origin", Ctx),
 		Hostname = ewgi_api:server_name(Ctx),

@@ -77,7 +77,7 @@ handle_result(Ctx, Socket) ->
 	    end;
 		
 	{websocket, WebSocketOwner} when is_pid(WebSocketOwner) ->
-		handle_websocket(Socket, WebSocketOwner);
+		{websocket, WebSocketOwner, false};
 		
 	Body ->
 	    {Code, _} = ewgi_api:response_status(Ctx),
@@ -137,16 +137,6 @@ handle_stream(Generator, YawsPid) when is_function(Generator, 0) ->
 handle_stream(Generator, YawsPid) ->
     error_logger:error_report(io_lib:format("Invalid stream generator: ~p~n", [Generator])),
     yaws_api:stream_chunk_end(YawsPid).
-
-handle_websocket(CliSock, WebSocketOwner) ->
-    case CliSock of
-	{sslsocket,_,_} ->
-	    ssl:controlling_process(CliSock, WebSocketOwner);
-	_ ->
-	    gen_tcp:controlling_process(CliSock, WebSocketOwner)
-    end,
-    WebSocketOwner ! {websocket_init, CliSock},
-    exit(normal).
 
 %%--------------------------------------------------------------------
 %% Push Streams API
