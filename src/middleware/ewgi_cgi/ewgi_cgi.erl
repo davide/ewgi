@@ -296,7 +296,7 @@ call_cgi(Ctx, [_DocRoot, _DocRootMountPoint, _Exefilename, _ExtraEnv] = Args) ->
 
 cgi_worker(Ctx, [DocRoot, DocRootMountPoint, Exefilename0, ExtraEnv]) ->
     Scriptname = ewgi_api:script_name(Ctx),
-    RelPathToScript = Scriptname -- DocRootMountPoint,
+    RelPathToScript = string:substr(Scriptname, 1+length(DocRootMountPoint)),
     Scriptfilename = DocRoot ++ RelPathToScript,
     Exefilename = case Exefilename0 of
 		      undefined -> exeof(Scriptfilename);
@@ -608,7 +608,7 @@ fcgi_worker(Role, Ctx, [DocRoot, DocRootMountPoint, Options]) ->
                         app_server_port_must_be_configured),
 
     Scriptname = ewgi_api:script_name(Ctx),
-    RelPathToScript = Scriptname -- DocRootMountPoint,
+    RelPathToScript = string:substr(Scriptname, 1+length(DocRootMountPoint)),
     Scriptfilename = DocRoot ++ RelPathToScript,
     ExtraEnv = get_opt(extra_env, Options, []),
     Env = build_env(Ctx, DocRoot, DocRootMountPoint,
