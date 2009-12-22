@@ -71,15 +71,15 @@ get_socket_sockname(Socket) ->
     {ok, {IP, _Port}}=inet:sockname(Socket),
     inet_parse:ntoa(IP).
 
-build_env(Ctx, DocRoot, DocRootMountPoint,
-	  Scriptname, Scriptfilename, ExtraEnv) ->
+build_env(Ctx, DocRoot, DocRootMountPoint, Scriptfilename, ExtraEnv) ->
+	Scriptname = ewgi_api:script_name(Ctx),
     Pathinfo = ewgi_api:path_info(Ctx),
-    RequestURI = Scriptname ++ Pathinfo ++
-	case ewgi_api:query_string(Ctx) of
-	    undefined -> [];
-	    [] -> [];
-	    Q -> "?" ++ Q
-	end,
+	RequestURI = Scriptname ++ Pathinfo ++ 
+		case ewgi_api:query_string(Ctx) of
+			undefined -> [];
+			[] -> [];
+			Q -> "?" ++ Q
+		end,
     ServerSoftware = ewgi_api:server_software(Ctx),
     ServerProtocol = ewgi_api:server_protocol(Ctx),
     Hostname = ewgi_api:server_name(Ctx), %% H#headers.host
@@ -284,28 +284,25 @@ get_opt(Key, List, Default) ->
 %%%  These functions can be used from a `.yaws' file.
 %%%  Note however, that they usually generate stream content.
 
-call_cgi(Ctx, [DocRoot, DocRootMountPoint]) ->
-    call_cgi(Ctx, [DocRoot, DocRootMountPoint, undefined, []]);
+call_cgi(Ctx, [DocRoot, DocRootMountPoint, Scriptfilename]) ->
+    call_cgi(Ctx, [DocRoot, DocRootMountPoint, Scriptfilename, undefined, []]);
 
-call_cgi(Ctx, [DocRoot, DocRootMountPoint, Exefilename]) ->
-    call_cgi(Ctx, [DocRoot, DocRootMountPoint, Exefilename, []]);
+call_cgi(Ctx, [DocRoot, DocRootMountPoint, Scriptfilename, Exefilename]) ->
+    call_cgi(Ctx, [DocRoot, DocRootMountPoint, Scriptfilename, Exefilename, []]);
 
-call_cgi(Ctx, [_DocRoot, _DocRootMountPoint, _Exefilename, _ExtraEnv] = Args) ->
+call_cgi(Ctx, [_DocRoot, _DocRootMountPoint, _Scriptfilename, _Exefilename, _ExtraEnv] = Args) ->
     WorkerPid = proc_lib:spawn(?MODULE, cgi_worker, [Ctx, Args]),
     ewgi_push_stream:run(Ctx, [WorkerPid]).
 
-cgi_worker(Ctx, [DocRoot, DocRootMountPoint, Exefilename0, ExtraEnv]) ->
-    Scriptname = ewgi_api:script_name(Ctx),
-    RelPathToScript = string:substr(Scriptname, 1+length(DocRootMountPoint)),
-    Scriptfilename = DocRoot ++ RelPathToScript,
+cgi_worker(Ctx, [DocRoot, DocRootMountPoint, Scriptfilename, Exefilename0, ExtraEnv]) ->
     Exefilename = case Exefilename0 of
 		      undefined -> exeof(Scriptfilename);
 		      "" -> exeof(Scriptfilename);
 		      FN -> FN
 		  end,
 
-    Env = build_env(Ctx, DocRoot, DocRootMountPoint,
-		    Scriptname, Scriptfilename, ExtraEnv),
+    Env = build_env(Ctx, DocRoot, DocRootMountPoint, Scriptfilename,
+																					ExtraEnv),
     ?Debug("~p~n", [Env]),
     CGIPort = open_port({spawn, Exefilename},
 			[{env, Env},
@@ -553,16 +550,16 @@ fcgi_status_name(_) -> "?".
 	 }).
 
 
-call_fcgi_responder(Ctx, [DocRoot, DocRootMountPoint]) ->
-    call_fcgi_responder(Ctx, [DocRoot, DocRootMountPoint, []]);
+call_fcgi_responder(Ctx, [DocRoot, DocRootMountPoint, Scriptfilename]) ->
+    call_fcgi_responder(Ctx, [DocRoot, DocRootMountPoint, Scriptfilename, []]);
 
-call_fcgi_responder(Ctx, [_DocRoot, _DocRootMountPoint, _Options] = Args) ->
+call_fcgi_responder(Ctx, [_DocRoot, _DocRootMountPoint, _Scriptfilename, _Options] = Args) ->
     call_fcgi(?FCGI_ROLE_RESPONDER, Ctx, Args).
 
 
-call_fcgi_authorizer(Ctx, [DocRoot, DocRootMountPoint]) ->
-    call_fcgi_authorizer(Ctx, [DocRoot, DocRootMountPoint, []]);
-call_fcgi_authorizer(Ctx, [_DocRoot, _DocRootMountPoint, _Options] = Args) ->
+call_fcgi_authorizer(Ctx, [DocRoot, DocRootMountPoint, Scriptfilename]) ->
+    call_fcgi_authorizer(Ctx, [DocRoot, DocRootMountPoint, Scriptfilename, []]);
+call_fcgi_authorizer(Ctx, [_DocRoot, _DocRootMountPoint, _Scriptfilename, _Options] = Args) ->
     Out = call_fcgi(?FCGI_ROLE_AUTHORIZER, Ctx, Args),
     case fcgi_is_access_allowed(Out) of
         true ->
@@ -573,7 +570,7 @@ call_fcgi_authorizer(Ctx, [_DocRoot, _DocRootMountPoint, _Options] = Args) ->
     end.
 
 
-call_fcgi(Role, Ctx, [_DocRoot, _DocRootMountPoint, _Options] = Args) ->
+call_fcgi(Role, Ctx, [_DocRoot, _DocRootMountPoint, _Scriptfilename, _Options] = Args) ->
     WorkerPid = proc_lib:spawn(?MODULE, fcgi_worker, [Role, Ctx, Args]),
     ewgi_push_stream:run(Ctx, [WorkerPid]).
 
@@ -598,7 +595,7 @@ fcgi_worker_fail_if(_Condition, _WorkerState, _Reason) ->
     ok.
 
 
-fcgi_worker(Role, Ctx, [DocRoot, DocRootMountPoint, Options]) ->
+fcgi_worker(Role, Ctx, [DocRoot, DocRootMountPoint, Scriptfilename, Options]) ->
     AppServerHost = proplists:get_value(app_server_host, Options),
     AppServerPort = proplists:get_value(app_server_port, Options),
     PreliminaryWorkerState = #fcgi_worker_state{},
@@ -607,12 +604,9 @@ fcgi_worker(Role, Ctx, [DocRoot, DocRootMountPoint, Options]) ->
     fcgi_worker_fail_if(AppServerPort == undefined, PreliminaryWorkerState,
                         app_server_port_must_be_configured),
 
-    Scriptname = ewgi_api:script_name(Ctx),
-    RelPathToScript = string:substr(Scriptname, 1+length(DocRootMountPoint)),
-    Scriptfilename = DocRoot ++ RelPathToScript,
     ExtraEnv = get_opt(extra_env, Options, []),
-    Env = build_env(Ctx, DocRoot, DocRootMountPoint,
-		    Scriptname, Scriptfilename, ExtraEnv),
+    Env = build_env(Ctx, DocRoot, DocRootMountPoint, Scriptfilename,
+																					ExtraEnv),
     TraceProtocol = proplists:get_value(trace_protocol, Options),
     LogAppError = proplists:get_value(log_app_error, Options),
     AppServerSocket =
