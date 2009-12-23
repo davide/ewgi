@@ -333,7 +333,7 @@ serve_icon(Ctx, Icon) ->
 			Filename =
 				filename:dirname(Dir) ++
 				"/../src/middleware/" ++
-				?MODULE_STRING ++ "/icons/" ++Icon,
+				?MODULE_STRING ++ "/icons/" ++ filename:basename(Icon),
 			ewgi_stream_file:run(Ctx, [Filename])			
 	end.
 
