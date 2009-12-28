@@ -13,9 +13,25 @@
 
 -export([run/2]).
 
-run(Ctx, [SC]) when is_record(SC, sconf) ->
-	GetPath = ewgi_api:path_info(Ctx),
-	UT = ewgi_server_url_type:discover_url_type(SC, GetPath),
+run(Ctx0, [SC]) when is_record(SC, sconf) ->
+	%% Remove DocRootMountPoint from GetPath
+	DocRootMountPoint = SC#sconf.docroot_mountpoint,
+	GetPath = ewgi_api:path_info(Ctx0),
+	ServerGetPath = string:substr(GetPath, 1+length(DocRootMountPoint)),
+	UT = ewgi_server_url_type:discover_url_type(SC, ServerGetPath),
+
+	%% Add DocRootMountPoint and the discovered scriptname to the previous scriptname
+	case ewgi_api:script_name(Ctx0) of
+		undefined -> PrevScriptName = "";
+		PrevScriptName -> ok
+	end,
+	ScriptName = PrevScriptName ++ DocRootMountPoint ++
+											UT#urltype.scriptname,
+	
+	%% Set the new script_name and path_info
+	Ctx = ewgi_api:script_name(ScriptName,
+				ewgi_api:path_info(UT#urltype.pathinfo, Ctx0)),
+	
 	handle_url_type(SC, Ctx, UT);
 
 run(Ctx, [DocRoot, DocRootMountPoint]) ->
@@ -33,7 +49,7 @@ handle_url_type(_, Ctx, #urltype{type=regular, fullpath=FullPath}) ->
 handle_url_type(SC, Ctx, #urltype{type=directory} = UT) ->
 	case SC#sconf.dir_content_listing of
 		true ->
-			GetPath = UT#urltype.dir,
+			GetPath = ewgi_api:script_name(Ctx),
 			FullPath = UT#urltype.fullpath,
 			Filenames = UT#urltype.data,
 			ZipLinks = [zip],
@@ -43,8 +59,8 @@ handle_url_type(SC, Ctx, #urltype{type=directory} = UT) ->
 	end;
 
 
-handle_url_type(_, Ctx, #urltype{type=redir} = UT) ->
-	RedirUrl = UT#urltype.path,
+handle_url_type(_, Ctx, #urltype{type=redir}) ->
+	RedirUrl = ewgi_api:script_name(Ctx),
     ewgi_api:response_status({302, "Found"}, 
 		ewgi_api:response_headers([{"Location", RedirUrl}], Ctx));
 
@@ -57,6 +73,11 @@ handle_url_type(SC, Ctx, #urltype{type={extmod,ExtModData}} = UT) ->
 	{M, F, A} = ExtModData,
 	NewUT = UT#urltype{type=undefined, data=A},
 	apply(M, F, [SC, Ctx, NewUT]);
+
+
+handle_url_type(_, Ctx, #urltype{type=appmod, data=MFA}) ->
+	{M,F,A} = MFA,
+	apply(M, F, [Ctx, A]);
 
 
 handle_url_type(_, Ctx, UrlType) ->

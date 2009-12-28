@@ -17,27 +17,25 @@
 		logged_download/3
 	]).
 
-cgi(SC, Ctx, #urltype{path=Scriptname}) ->
+cgi(SC, Ctx, #urltype{fullpath=Scriptfilename}) ->
 	DocRoot = SC#sconf.docroot,
 	DocRootMountPoint = SC#sconf.docroot_mountpoint,
-	ewgi_cgi:call_cgi(Ctx, [DocRoot, DocRootMountPoint, Scriptname]).
+	ewgi_cgi:call_cgi(Ctx, [DocRoot, DocRootMountPoint, Scriptfilename]).
 													
 													
 interpreted_cgi(SC, Ctx, #urltype{fullpath=Scriptfilename,
-												pathinfo=Pathinfo, data=CGI_EXE}) ->
+												data=CGI_EXE}) ->
 	DocRoot = SC#sconf.docroot,
 	DocRootMountPoint = SC#sconf.docroot_mountpoint,
-	Ctx1 = prepare_cgi(Ctx, Pathinfo),
-	ewgi_cgi:call_cgi(Ctx1, [DocRoot, DocRootMountPoint,
+	ewgi_cgi:call_cgi(Ctx, [DocRoot, DocRootMountPoint,
 													Scriptfilename, CGI_EXE]).
 
 
-fastcgi(SC, Ctx, #urltype{fullpath=Scriptfilename, pathinfo=Pathinfo,
-															data=FCGI_Options}) ->
+fastcgi(SC, Ctx, #urltype{fullpath=Scriptfilename,
+									data=FCGI_Options}) ->
 	DocRoot = SC#sconf.docroot,
 	DocRootMountPoint = SC#sconf.docroot_mountpoint,
-	Ctx1 = prepare_cgi(Ctx, Pathinfo),
-	ewgi_cgi:call_fcgi_responder(Ctx1, [DocRoot, DocRootMountPoint,
+	ewgi_cgi:call_fcgi_responder(Ctx, [DocRoot, DocRootMountPoint,
 														Scriptfilename, FCGI_Options]).
 
 
@@ -45,10 +43,3 @@ logged_download(_, Ctx, #urltype{fullpath=FullPath}) ->
 	io:format("Sending: ~p!~n", [FullPath]),
 	ewgi_stream_file:run(Ctx, [FullPath]).
 
-
-%% Fix script_name and path_info
-prepare_cgi(Ctx, Pathinfo) ->
-	RequestedURI = ewgi_api:path_info(Ctx),
-	ScriptnameLength = length(RequestedURI) - length(Pathinfo),
-	Scriptname = string:sub_string(RequestedURI, 1, ScriptnameLength),
-	ewgi_api:script_name(Scriptname, ewgi_api:path_info(Pathinfo, Ctx)).
