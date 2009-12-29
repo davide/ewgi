@@ -23,7 +23,7 @@ discover_url_type(SC, "/" = GetPath) ->
 		undefined ->
 			FullPath =
 				construct_fullpath(GetPath, DocRoot),
-			maybe_return_dir(SC, GetPath, FullPath);
+			maybe_return_dir(SC, GetPath, GetPath, FullPath);
 		{_,_,_} = MFA ->
 			#urltype{type = appmod,
 					 data = MFA,
@@ -31,16 +31,19 @@ discover_url_type(SC, "/" = GetPath) ->
 					 pathinfo = "",
 					 fullpath = DocRoot}
 	end;
-
 discover_url_type(SC, GetPath) ->
-	?Debug("GetPath = ~p~n", [GetPath]),
+    discover_url_type(SC, GetPath, GetPath).
+
+
+discover_url_type(SC, GetPath, LookupPath) ->
+	?Debug("LookupPath = ~p~n", [LookupPath]),
 	DocRoot = SC#sconf.docroot,
-	FullPath = construct_fullpath(GetPath, DocRoot),
-	{Comps, RevFile} = comp_split(GetPath),
+	FullPath = construct_fullpath(LookupPath, DocRoot),
+	{Comps, RevFile} = comp_split(LookupPath),
 	?Debug("FullPath = ~p~n", [FullPath]),
 	?Debug("Comps = ~p RevFile = ~p~n",[Comps, RevFile]),
 
-	RequestSegs = string:tokens(GetPath,"/"),
+	RequestSegs = string:tokens(LookupPath,"/"),
 	case active_appmod(SC#sconf.appmods, RequestSegs) of
 		false ->
 			case prim_file:read_file_info(FullPath) of
@@ -55,7 +58,7 @@ discover_url_type(SC, GetPath) ->
 				{ok, FI} when FI#file_info.type == directory ->
 					case RevFile of
 						[] ->
-							maybe_return_dir(SC, GetPath, FullPath);
+							maybe_return_dir(SC, GetPath, LookupPath, FullPath);
 						_ ->
 							%%Presence of RevFile indicates dir url
 							%% had no trailing /
@@ -81,9 +84,9 @@ discover_url_type(SC, GetPath) ->
 	end.
 
 
-maybe_return_dir(SC, GetPath, FullPath) ->
+maybe_return_dir(SC, GetPath, LookupPath, FullPath) ->
 	IndexFiles = SC#sconf.index_files,
-    case try_index_files(SC, GetPath, FullPath, IndexFiles) of
+    case try_index_files(SC, GetPath, LookupPath, FullPath, IndexFiles) of
         noindex ->
             case file:list_dir(FullPath) of
                 {ok, List} ->
@@ -101,14 +104,14 @@ maybe_return_dir(SC, GetPath, FullPath) ->
     end.
 
 
-try_index_files(_, _, _, []) ->
+try_index_files(_, _, _, _, []) ->
 	noindex;
-try_index_files(SC, GetPath, FullPath, [IndexFile|RemIndexFiles]) ->
+try_index_files(SC, GetPath, LookupPath, FullPath, [IndexFile|RemIndexFiles]) ->
     case prim_file:read_file_info([FullPath, IndexFile]) of
         {ok, FI} when FI#file_info.type == regular ->
-            discover_url_type(SC, GetPath ++ IndexFile);
+            discover_url_type(SC, GetPath, LookupPath ++ IndexFile);
         _ ->
-			try_index_files(SC, GetPath, FullPath, RemIndexFiles)
+	    try_index_files(SC, GetPath, LookupPath, FullPath, RemIndexFiles)
     end.
 
 
@@ -307,8 +310,8 @@ path_info_split([], _DR_Vdir, _Acc) ->
 %%%----------------------------------------------------------------------
 %%%    Internal Functions
 %%%----------------------------------------------------------------------
-construct_fullpath(GetPath, DocRoot) ->
-	DocRoot ++ GetPath.
+construct_fullpath(LookupPath, DocRoot) ->
+	DocRoot ++ LookupPath.
 
 suffix_type(SC, L) ->
     R=suffix_type(L),
