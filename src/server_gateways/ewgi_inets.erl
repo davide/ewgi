@@ -32,7 +32,7 @@
 		stream_process_end/2
 	]).
 
--include_lib("inets/src/httpd.hrl").
+-include_lib("inets/include/httpd.hrl").
 -include_lib("ewgi.hrl").
 
 do(A) ->
