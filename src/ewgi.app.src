@@ -1,0 +1,7 @@
+{application, ewgi,
+ [{description, "Erlang Webserver Gateway Interface"}
+  ,{vsn, "0.2"}
+  ,{applications, [kernel, stdlib]}
+  ,{env, []}
+  ,{modules, [ewgi_api, ewgi_application, ewgi_cgi, ewgi_deflate, ewgi_dir_listing, ewgi_dir_zipper, ewgi_dumper, ewgi_inets, ewgi_lint, ewgi_mochiweb, ewgi_post, ewgi_push_stream, ewgi_rails, ewgi_serve_file, ewgi_server, ewgi_server_extension_mods, ewgi_server_url_type, ewgi_session, ewgi_session_cookie_store, ewgi_session_server, ewgi_session_server_store, ewgi_stream_file, ewgi_test, ewgi_testapp, ewgi_util_calendar, ewgi_util_cookie, ewgi_util_crypto, ewgi_util_html, ewgi_util_mime_types, ewgi_websocket, ewgi_yaws]}
+ ]}.
